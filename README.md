@@ -66,10 +66,10 @@ npx hardhat test test/AntiCounterfeitNFT.test.ts
 📸 Demo Screenshots
 
 Hardhat test result
-(images/test-result.png)
+![Test Result](images/test-result.png)
 
 Demo script output
-(images/demo-output.png)
+![Demo Output](images/demo-output.png)
 
 🌐 Next Steps
 
