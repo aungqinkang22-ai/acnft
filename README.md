@@ -1,7 +1,3 @@
-好的 ✅ 我幫你整理一個 **直接可用的 README.md**，你只要整份 copy → paste 到你的專案 `README.md` 就能用。
-
----
-
 ```markdown
 # 🛡️ AntiCounterfeitNFT (ACNFT)
 
