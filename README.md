@@ -1,57 +1,112 @@
-# Sample Hardhat 3 Beta Project (`node:test` and `viem`)
+好的 ✅ 我幫你整理一個 **直接可用的 README.md**，你只要整份 copy → paste 到你的專案 `README.md` 就能用。
 
-This project showcases a Hardhat 3 Beta project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+---
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+```markdown
+# 🛡️ AntiCounterfeitNFT (ACNFT)
 
-## Project Overview
+A minimal Web3 project that demonstrates how NFTs can be used for **anti-counterfeit verification**.  
+Built with **Hardhat**, **Solidity**, and **TypeScript**.
 
-This example project includes:
+---
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+## ✨ Features
+- **Mint** → Owner can issue NFTs as certificates of authenticity.  
+- **Revoke** → Owner can revoke an NFT (mark as counterfeit).  
+- **Pause/Unpause** → System can be paused to stop minting when necessary.  
+- **ERC721URIStorage** → Each NFT carries a metadata URI (e.g., IPFS link).  
 
-## Usage
+---
 
-### Running Tests
+## 📂 Project Structure
+```
 
-To run all the tests in the project, execute the following command:
+acnft/
+├── contracts/              # Solidity smart contracts
+│   └── AntiCounterfeitNFT.sol
+├── scripts/                # Demo scripts
+│   └── demo.ts
+├── test/                   # Unit tests
+│   └── AntiCounterfeitNFT.test.ts
+├── hardhat.config.ts       # Hardhat config
+└── README.md               # Project documentation
 
-```shell
+````
+
+---
+
+## ⚡ Getting Started
+
+### 1. Install dependencies
+```bash
+npm install
+````
+
+### 2. Compile contracts
+
+```bash
+npx hardhat compile
+```
+
+### 3. Run tests
+
+```bash
 npx hardhat test
 ```
 
-You can also selectively run the Solidity or `node:test` tests:
+### 4. Run demo script
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
+```bash
+npx hardhat run scripts/demo.ts
 ```
 
-### Make a deployment to Sepolia
+✅ Expected output:
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+```
+Owner: 0x...
+Alice: 0x...
+Deployed AntiCounterfeitNFT at: 0x...
+Minted tokenId 0 to: 0xAlice...
+ownerOf(0): 0xAlice...
+isRevoked(0): false
+Revoked tokenId 0
+isRevoked(0): true
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+---
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+## 🧪 Example Test
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+The project includes a unit test to verify:
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+* Minting assigns the correct owner.
+* Revoking marks the token as revoked.
+
+Run only this test:
+
+```bash
+npx hardhat test test/AntiCounterfeitNFT.test.ts
 ```
 
-After setting the variable, you can run the deployment with the Sepolia network:
+---
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
+## 🌐 Next Steps
+
+* Upload NFT metadata to **IPFS**.
+* Deploy the contract to a testnet (e.g., Sepolia).
+* Build a simple **frontend verifier** (scan QR → show `ownerOf`, `tokenURI`, `isRevoked`).
+
+---
+
+## 📜 License
+
+MIT
+
+```
+
+---
+
+📌 建議：你可以再加幾張 **截圖**（例如你跑 `npx hardhat test` 或 `npx hardhat run scripts/demo.ts` 的輸出），在 README 裡加一個「Demo Screenshots」區塊，會讓作品更有說服力。  
+
+要不要我幫你在這份 README 裡預留「Screenshots 區塊」，你只要把圖片放到 repo 裡就能顯示？
 ```
