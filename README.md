@@ -1,19 +1,20 @@
-# 🛡️ AntiCounterfeitNFT (ACNFT)
+🛡️ AntiCounterfeitNFT (ACNFT)
 
-A minimal Web3 project that demonstrates how NFTs can be used for **anti-counterfeit verification**.  
-Built with **Hardhat**, **Solidity**, and **TypeScript**.
+A minimal Web3 project that demonstrates how NFTs can be used for anti-counterfeit verification.
+Built with Hardhat, Solidity, and TypeScript.
 
----
+✨ Features
 
-## ✨ Features
-- **Mint** → Owner can issue NFTs as certificates of authenticity.  
-- **Revoke** → Owner can revoke an NFT (mark as counterfeit).  
-- **Pause/Unpause** → System can be paused to stop minting when necessary.  
-- **ERC721URIStorage** → Each NFT carries a metadata URI (e.g., IPFS link).  
+Mint → Owner can issue NFTs as certificates of authenticity.
 
----
+Revoke → Owner can revoke an NFT (mark as counterfeit).
 
-## 📂 Project Structure
+Pause/Unpause → System can be paused to stop minting when necessary.
+
+ERC721URIStorage → Each NFT carries a metadata URI (e.g., IPFS link).
+
+📂 Project Structure
+
 acnft/
 ├── contracts/ # Solidity smart contracts
 │ └── AntiCounterfeitNFT.sol
@@ -27,32 +28,21 @@ acnft/
 ├── hardhat.config.ts # Hardhat config
 └── README.md # Project documentation
 
-yaml
-Copy code
+⚡ Getting Started
 
----
-
-## ⚡ Getting Started
-
-### 1. Install dependencies
-```bash
+Install dependencies
 npm install
-2. Compile contracts
-bash
-Copy code
-npx hardhat compile
-3. Run tests
-bash
-Copy code
-npx hardhat test
-4. Run demo script
-bash
-Copy code
-npx hardhat run scripts/demo.ts
-✅ Expected output:
 
-yaml
-Copy code
+Compile contracts
+npx hardhat compile
+
+Run tests
+npx hardhat test
+
+Run demo script
+npx hardhat run scripts/demo.ts
+
+Expected output:
 Owner: 0x...
 Alice: 0x...
 Deployed AntiCounterfeitNFT at: 0x...
@@ -61,24 +51,28 @@ ownerOf(0): 0xAlice...
 isRevoked(0): false
 Revoked tokenId 0
 isRevoked(0): true
+
 🧪 Example Test
-The project includes a unit test to verify:
+
+This project includes a unit test to verify:
 
 Minting assigns the correct owner.
 
 Revoking marks the token as revoked.
 
 Run only this test:
-
-bash
-Copy code
 npx hardhat test test/AntiCounterfeitNFT.test.ts
+
 📸 Demo Screenshots
+
 Hardhat test result
+(images/test-result.png)
 
 Demo script output
+(images/demo-output.png)
 
 🌐 Next Steps
+
 Upload NFT metadata to IPFS.
 
 Deploy the contract to a testnet (e.g., Sepolia).
@@ -86,4 +80,5 @@ Deploy the contract to a testnet (e.g., Sepolia).
 Build a simple frontend verifier (scan QR → show ownerOf, tokenURI, isRevoked).
 
 📜 License
+
 MIT
