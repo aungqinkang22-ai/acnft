@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ACNFT Verifier</title>
+  <title>ACNFT Verifier (ethers.js)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <!-- ethers v6 UMD：可在 file:// 直接使用 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
   <style>
     .label{font-size:.875rem;color:#6b7280}
     .value{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;color:#111827;word-break:break-all}
@@ -15,17 +17,22 @@
   <div class="max-w-4xl mx-auto p-6">
     <header class="mb-6">
       <h1 class="text-3xl font-bold">🔒 ACNFT Verifier</h1>
-      <p class="text-slate-600">Verify <span class="font-mono">ownerOf</span>, <span class="font-mono">tokenURI</span> and <span class="font-mono">isRevoked</span> on Sepolia.</p>
+      <p class="text-slate-600">
+        Verify <span class="font-mono">ownerOf</span>, <span class="font-mono">tokenURI</span> and
+        <span class="font-mono">isRevoked</span> on Sepolia (ethers.js, no ESM).
+      </p>
     </header>
 
     <div class="grid gap-4 md:grid-cols-2">
       <label class="block">
         <div class="label mb-1">Sepolia RPC URL</div>
-        <input id="rpcUrl" type="text" class="w-full rounded-xl border p-2" placeholder="https://eth-sepolia.g.alchemy.com/v2/XXXX"/>
+        <input id="rpcUrl" type="text" class="w-full rounded-xl border p-2"
+               placeholder="https://eth-sepolia.g.alchemy.com/v2/XXXX"/>
       </label>
       <label class="block">
         <div class="label mb-1">Contract Address</div>
-        <input id="contractAddr" type="text" class="w-full rounded-xl border p-2" value="0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f"/>
+        <input id="contractAddr" type="text" class="w-full rounded-xl border p-2"
+               value="0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f"/>
       </label>
     </div>
 
@@ -64,139 +71,130 @@
     </div>
   </div>
 
-  <script type="module">
-    import { createPublicClient, http } from "https://esm.sh/viem";
-    import { sepolia } from "https://esm.sh/viem/chains";
-
-    const abi = [
-      { "inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"metadataURI","type":"string"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
-      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"isRevoked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+  <script>
+    // ====== config ======
+    const MY_PINATA_SUBDOMAIN = "cyan-chemical-iguana-511.mypinata.cloud";
+    const ABI = [
+      {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"metadataURI","type":"string"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+      {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
+      {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"isRevoked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
     ];
 
+    // ====== helpers ======
     const $ = (id) => document.getElementById(id);
     const LS_KEY = "acnft_verifier_state";
-    const MY_PINATA_SUBDOMAIN = "cyan-chemical-iguana-511.mypinata.cloud"; // 你的 Pinata 子網域
-
-    // no-cache helper
     const noCache = (url) => url + (url.includes("?") ? "&" : "?") + "_=" + Date.now();
+    const normalizeIpfs = (u) => (u||"").replace(/^ipfs:\/\//,'');
+    const ipfsToHttp = (u) => u && u.startsWith("ipfs://")
+      ? `https://${MY_PINATA_SUBDOMAIN}/ipfs/${u.slice(7)}`
+      : u;
 
-    // 把 ipfs:// 轉成你的 Pinata 子網域 (HTTP)
-    function ipfsToHttp(u){
-      if (!u) return "";
-      if (u.startsWith("ipfs://")) {
-        const path = u.slice(7);
-        return `https://${MY_PINATA_SUBDOMAIN}/ipfs/${path}`;
+    async function fetchTextFromGateways(ipfsOrHttp){
+      if (/^https?:\/\//i.test(ipfsOrHttp)) {
+        const res = await fetch(noCache(ipfsOrHttp), { cache:"no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return { text: await res.text(), tried:[ipfsOrHttp] };
       }
-      return u;
+      const path = normalizeIpfs(ipfsOrHttp);
+      const gws = [
+        (p)=>`https://${MY_PINATA_SUBDOMAIN}/ipfs/${p}`,
+        (p)=>`https://gateway.pinata.cloud/ipfs/${p}`,
+        (p)=>`https://cloudflare-ipfs.com/ipfs/${p}`,
+        (p)=>`https://ipfs.io/ipfs/${p}`,
+        (p)=>`https://${p}.ipfs.dweb.link`
+      ];
+      const tried = [];
+      let lastErr;
+      for (const toUrl of gws){
+        const url = toUrl(path); tried.push(url);
+        try{
+          const res = await fetch(noCache(url), { cache:"no-store" });
+          if (res.ok) return { text: await res.text(), tried };
+          lastErr = `HTTP ${res.status}`;
+        }catch(e){ lastErr = e?.message || String(e); }
+      }
+      throw Object.assign(new Error(`All gateways failed (${lastErr||"unknown"})`), { tried });
     }
 
-    // init from localStorage
+    // ====== UI init ======
     (function init(){
       const s = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
       if (s.rpcUrl) $("rpcUrl").value = s.rpcUrl;
       if (s.contractAddr) $("contractAddr").value = s.contractAddr;
-      if (typeof s.tokenId !== "undefined") $("tokenId").value = s.tokenId;
+      if (s.tokenId !== undefined) $("tokenId").value = s.tokenId;
     })();
 
-    $("saveBtn").addEventListener("click", () => {
-      const s = {
+    $("saveBtn").addEventListener("click", ()=>{
+      localStorage.setItem(LS_KEY, JSON.stringify({
         rpcUrl: $("rpcUrl").value.trim(),
         contractAddr: $("contractAddr").value.trim(),
         tokenId: $("tokenId").value.trim()
-      };
-      localStorage.setItem(LS_KEY, JSON.stringify(s));
+      }));
       alert("Saved!");
     });
 
-    $("clearBtn").addEventListener("click", () => {
+    $("clearBtn").addEventListener("click", ()=>{
       localStorage.removeItem(LS_KEY);
       $("rpcUrl").value = "";
       $("tokenId").value = "";
     });
 
     $("fetchBtn").addEventListener("click", fetchData);
-    window.addEventListener("load", () => {
-      const hasBasics = $("rpcUrl").value && $("contractAddr").value && $("tokenId").value;
-      if (hasBasics) fetchData().catch(()=>{});
-    });
 
-    function normalizeIpfs(u){ return u.trim().replace(/^ipfs:\/\//,''); }
-
-    async function fetchTextFromGateways(ipfsUri){
-      const path = normalizeIpfs(ipfsUri);
-      const gateways = [
-        (p)=>`https://${MY_PINATA_SUBDOMAIN}/ipfs/${p}`,
-        (p)=>`https://gateway.pinata.cloud/ipfs/${p}`,
-        (p)=>`https://cloudflare-ipfs.com/ipfs/${p}`,
-        (p)=>`https://ipfs.io/ipfs/${p}`,
-        (p)=>`https://${path}.ipfs.dweb.link`
-      ];
-
-      $("gwLinks").innerHTML = gateways
-        .map(fn=>`<a class="underline text-blue-600" target="_blank" href="${fn(path)}">${fn(path)}</a>`)
-        .join("<br/>");
-
-      let lastErr;
-      for (const toUrl of gateways){
-        try{
-          const url = toUrl(path);
-          const res = await fetch(noCache(url), { cache: "no-store" });
-          if (res.ok) return await res.text();
-          lastErr = `HTTP ${res.status}`;
-        }catch(e){ lastErr = e?.message || String(e); }
-      }
-      throw new Error(`All gateways failed (${lastErr || "unknown error"})`);
-    }
-
+    // ====== main ======
     async function fetchData(){
-      $("error").textContent="";
-      $("owner").textContent=$("tokenURI").textContent=$("revoked").textContent="-";
-      $("metaPreview").textContent="-";
+      $("error").textContent = "";
+      $("owner").textContent = $("tokenURI").textContent = $("revoked").textContent = "-";
+      $("metaPreview").textContent = "-";
       $("imgWrap").classList.add("hidden");
       $("nftImage").removeAttribute("src");
       $("qrcode").replaceChildren();
+      $("gwLinks").innerHTML = "";
 
       const rpcUrl = $("rpcUrl").value.trim();
-      const contractAddr = $("contractAddr").value.trim();
-      const tokenIdStr = $("tokenId").value.trim();
-      if (!rpcUrl || !contractAddr || tokenIdStr===""){
-        $("error").textContent="Please fill RPC, Contract and Token ID.";
+      const addr   = $("contractAddr").value.trim();
+      const tidStr = $("tokenId").value.trim();
+
+      if (!rpcUrl || !addr || tidStr===""){
+        $("error").textContent = "Please fill RPC, Contract and Token ID.";
         return;
       }
 
       let tokenId;
-      try{ tokenId = BigInt(tokenIdStr); }
-      catch{ $("error").textContent="Token ID must be an integer."; return; }
+      try { tokenId = BigInt(tidStr); }
+      catch { $("error").textContent = "Token ID must be an integer."; return; }
 
       try{
-        const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+        // ethers v6 provider + contract (read-only)
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const contract = new ethers.Contract(addr, ABI, provider);
 
         // ownerOf
         try{
-          const owner = await client.readContract({ address: contractAddr, abi, functionName: "ownerOf", args: [tokenId] });
+          const owner = await contract.ownerOf(tokenId);
           $("owner").textContent = owner;
-        }catch(e){ $("owner").textContent = "⛔ "+(e?.shortMessage || e?.message || e); }
+        }catch(e){ $("owner").textContent = "⛔ "+(e?.shortMessage||e?.message||e); }
 
         // tokenURI
         let uri = "-";
         try{
-          uri = await client.readContract({ address: contractAddr, abi, functionName: "tokenURI", args: [tokenId] });
+          uri = await contract.tokenURI(tokenId);
           $("tokenURI").textContent = uri;
-        }catch(e){ $("tokenURI").textContent = "⛔ "+(e?.shortMessage || e?.message || e); }
+        }catch(e){ $("tokenURI").textContent = "⛔ "+(e?.shortMessage||e?.message||e); }
 
         // isRevoked
         try{
-          const revoked = await client.readContract({ address: contractAddr, abi, functionName: "isRevoked", args: [tokenId] });
+          const revoked = await contract.isRevoked(tokenId);
           $("revoked").textContent = String(revoked);
-        }catch(e){ $("revoked").textContent = "⛔ "+(e?.shortMessage || e?.message || e); }
+        }catch(e){ $("revoked").textContent = "⛔ "+(e?.shortMessage||e?.message||e); }
 
         // metadata + image
-        if (typeof uri==="string" && (uri.startsWith("ipfs://") || uri.startsWith("http"))){
+        if (typeof uri === "string" && (uri.startsWith("ipfs://") || uri.startsWith("http"))){
           try{
-            const text = await fetchTextFromGateways(uri);
+            const { text, tried } = await fetchTextFromGateways(uri);
             $("metaPreview").textContent = text;
+            $("gwLinks").innerHTML = tried.map(u=>`<a class="underline text-blue-600" target="_blank" href="${u}">${u}</a>`).join("<br/>");
 
             try{
               const meta = JSON.parse(text);
@@ -205,18 +203,18 @@
                 $("nftImage").src = imgUrl;
                 $("imgWrap").classList.remove("hidden");
               }
-            }catch{/* ignore JSON parse error */}
+            }catch{/* JSON 解析失敗就忽略圖片 */}
           }catch(e){
-            $("metaPreview").textContent = "Failed to fetch metadata: "+(e?.message || e);
+            $("metaPreview").textContent = "Failed to fetch metadata: " + (e?.message||e);
           }
         }
 
-        // QR
-        const etherscanUrl = `https://sepolia.etherscan.io/token/${contractAddr}?a=${tokenId}`;
+        // QR (Etherscan)
+        const etherscanUrl = `https://sepolia.etherscan.io/token/${addr}?a=${tokenId}`;
         QRCode.toCanvas($("qrcode"), etherscanUrl, { width: 150 }, (err)=>{ if (err) console.error(err); });
 
       }catch(err){
-        $("error").textContent = err?.message || err;
+        $("error").textContent = err?.message || String(err);
       }
     }
   </script>
