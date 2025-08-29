@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ACNFT Verifier</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- QRCode -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    .label { font-size: 0.875rem; color: #6b7280; }
+    .value { 
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; 
+      color: #111827;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900">
+  <div class="max-w-3xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold">🔒 ACNFT Verifier</h1>
+      <p class="text-slate-600">Verify <span class="font-mono">ownerOf</span>, <span class="font-mono">tokenURI</span> and <span class="font-mono">isRevoked</span> on Sepolia.</p>
+    </header>
+
+    <div class="grid gap-4 md:grid-cols-2">
+      <label class="block">
+        <div class="label mb-1">Sepolia RPC URL</div>
+        <input id="rpcUrl" type="text" placeholder="https://eth-sepolia.g.alchemy.com/v2/XXXX"
+          class="w-full rounded-xl border p-2" />
+      </label>
+      <label class="block">
+        <div class="label mb-1">Contract Address</div>
+        <input id="contractAddr" type="text" placeholder="0x..."
+          class="w-full rounded-xl border p-2" />
+      </label>
+    </div>
+
+    <div class="mt-4 flex gap-2">
+      <input id="tokenId" type="number" placeholder="Token ID"
+        class="flex-1 rounded-xl border p-2" />
+      <button onclick="fetchData()" class="px-4 py-2 bg-blue-600 text-white rounded-xl">Fetch</button>
+    </div>
+
+    <div id="error" class="text-red-600 mt-2"></div>
+
+    <div class="mt-6 grid gap-4 md:grid-cols-3">
+      <div><div class="label">ownerOf</div><div id="owner" class="value">-</div></div>
+      <div><div class="label">tokenURI</div><div id="tokenURI" class="value">-</div></div>
+      <div><div class="label">isRevoked</div><div id="revoked" class="value">-</div></div>
+    </div>
+
+    <div class="mt-6 grid gap-4 md:grid-cols-2">
+      <div><div class="label">QR: Etherscan token page</div><canvas id="qrcode"></canvas></div>
+      <div><div class="label">Metadata preview (HTTP gateway)</div><iframe id="metadataFrame" class="w-full h-40 border rounded"></iframe></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createPublicClient, http } from "https://esm.sh/viem";
+    import { sepolia } from "https://esm.sh/viem/chains";
+
+    const abi = [
+      { "inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"metadataURI","type":"string"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
+      { "inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"isRevoked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+    ];
+
+    function $(id) { return document.getElementById(id); }
+
+    async function fetchData() {
+      $("error").textContent = "";
+      $("owner").textContent = $("tokenURI").textContent = $("revoked").textContent = "-";
+      $("metadataFrame").src = "";
+      $("qrcode").replaceChildren();
+
+      const rpcUrl = $("rpcUrl").value.trim();
+      const contractAddr = $("contractAddr").value.trim();
+      const tokenId = BigInt($("tokenId").value);
+
+      try {
+        const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+
+        let owner = '-', uri = '-', revoked = '-';
+
+        try {
+          owner = await client.readContract({ address: contractAddr, abi, functionName: 'ownerOf', args: [tokenId] });
+          $('owner').textContent = owner;
+        } catch (e) {
+          $('owner').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+        }
+
+        try {
+          uri = await client.readContract({ address: contractAddr, abi, functionName: 'tokenURI', args: [tokenId] });
+          $('tokenURI').textContent = uri;
+          if (uri.startsWith("ipfs://")) {
+            $("metadataFrame").src = "https://ipfs.io/ipfs/" + uri.replace("ipfs://", "");
+          }
+        } catch (e) {
+          $('tokenURI').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+        }
+
+        try {
+          revoked = await client.readContract({ address: contractAddr, abi, functionName: 'isRevoked', args: [tokenId] });
+          $('revoked').textContent = String(revoked);
+        } catch (e) {
+          $('revoked').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+        }
+
+        // QR code
+        const etherscanUrl = `https://sepolia.etherscan.io/token/${contractAddr}?a=${tokenId}`;
+        QRCode.toCanvas($("qrcode"), etherscanUrl, { width: 150 }, (err) => { if (err) console.error(err); });
+
+      } catch (err) {
+        $("error").textContent = err?.message || err;
+      }
+    }
+    window.fetchData = fetchData;
+  </script>
+</body>
+</html>
