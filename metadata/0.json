@@ -1,0 +1,8 @@
+{
+  "name": "ACNFT #0",
+  "description": "Anti-Counterfeit NFT demo on Sepolia",
+  "image": "ipfs://QmYourImageCIDHere",
+  "attributes": [
+    { "trait_type": "Authenticity", "value": "Verified" }
+  ]
+}
