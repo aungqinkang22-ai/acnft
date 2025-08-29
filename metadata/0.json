@@ -1,7 +1,7 @@
 {
   "name": "ACNFT Demo #1",
   "description": "A demo anti-counterfeit NFT with metadata hosted on IPFS.",
-  "image": "ipfs://bafkreidgoxmw6gdmsurcawiitogoah3ek5abldmx6wroev3njwe5hhkorq",
+  "image": "ipfs://bafybeifpewlwvrudwlpahqwtcgzl5vuahpxkt5oft6f5k5uteinriylmee",
   "attributes": [
     { "trait_type": "Authenticity", "value": "Verified" },
     { "trait_type": "Revoked", "value": "false" }
