@@ -71,11 +71,12 @@ Hardhat test result
 Demo script output
 ![Demo Output](images/demo-output.png)
 
+## 🌐 Deployments
+- Sepolia: [0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f](https://sepolia.etherscan.io/address/0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f#code)
+
 🌐 Next Steps
 
 Upload NFT metadata to IPFS.
-
-Deploy the contract to a testnet (e.g., Sepolia).
 
 Build a simple frontend verifier (scan QR → show ownerOf, tokenURI, isRevoked).
 
