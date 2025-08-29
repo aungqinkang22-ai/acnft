@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IPFS image quick test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px}
+    label{display:block;margin:.25rem 0;color:#475569}
+    input,button{font-size:16px}
+    input{width:100%;max-width:820px;padding:.6rem .75rem;border:1px solid #cbd5e1;border-radius:.75rem}
+    button{padding:.6rem 1rem;border-radius:.75rem;border:0;background:#2563eb;color:#fff;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;word-break:break-all}
+    .muted{color:#64748b}
+    .row{display:flex;gap:.75rem;align-items:center;margin:.5rem 0 1rem 0}
+    #meta{white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.75rem;padding:.75rem;max-width:820px;overflow:auto}
+    #img{max-width:420px;max-height:420px;border:1px solid #e2e8f0;border-radius:.75rem}
+    #links a{display:block;color:#2563eb;text-decoration:underline}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <h1>🔎 IPFS image quick test</h1>
+  <p class="muted">輸入 NFT 的 <span class="mono">tokenURI</span>（<span class="mono">ipfs://…</span> 或 <span class="mono">https://…</span>），我會抓回 JSON 並顯示其中的 <span class="mono">image</span>。</p>
+
+  <label>tokenURI</label>
+  <div class="row">
+    <input id="uri" placeholder="e.g. ipfs://bafkrei..." />
+    <button id="go">Fetch</button>
+  </div>
+
+  <div id="err" class="mono" style="color:#b91c1c"></div>
+
+  <div class="grid" style="margin-top:12px">
+    <div>
+      <div class="muted">Metadata (raw JSON)</div>
+      <div id="meta" class="mono">-</div>
+      <div class="muted" style="margin-top:.5rem">Gateways tried</div>
+      <div id="links" class="mono"></div>
+    </div>
+    <div>
+      <div class="muted">image</div>
+      <img id="img" alt="preview will appear here" />
+    </div>
+  </div>
+
+  <script>
+    const MY_PINATA_SUBDOMAIN = "cyan-chemical-iguana-511.mypinata.cloud";
+    const $ = (id) => document.getElementById(id);
+    const noCache = (url) => url + (url.includes("?") ? "&" : "?") + "_=" + Date.now();
+
+    function normalizeIpfs(u){ return (u||"").replace(/^ipfs:\/\//,""); }
+    function ipfsToHttp(u){
+      if (!u) return "";
+      if (u.startsWith("ipfs://")) return `https://${MY_PINATA_SUBDOMAIN}/ipfs/` + u.slice(7);
+      return u;
+    }
+
+    async function fetchTextFromGateways(maybeIpfsUrl){
+      if (/^https?:\/\//i.test(maybeIpfsUrl)) {
+        const r = await fetch(noCache(maybeIpfsUrl), { cache:"no-store" });
+        if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { tried:[maybeIpfsUrl] });
+        return { text: await r.text(), tried: [maybeIpfsUrl] };
+      }
+      const path = normalizeIpfs(maybeIpfsUrl);
+      const gateways = [
+        (p)=>`https://${MY_PINATA_SUBDOMAIN}/ipfs/${p}`,
+        (p)=>`https://gateway.pinata.cloud/ipfs/${p}`,
+        (p)=>`https://cloudflare-ipfs.com/ipfs/${p}`,
+        (p)=>`https://ipfs.io/ipfs/${p}`,
+        (p)=>`https://${p}.ipfs.dweb.link`,
+      ];
+      const tried = [];
+      let lastErr;
+      for (const toUrl of gateways) {
+        const url = toUrl(path); tried.push(url);
+        try{
+          const res = await fetch(noCache(url), { cache:"no-store" });
+          if (res.ok) return { text: await res.text(), tried };
+          lastErr = `HTTP ${res.status}`;
+        }catch(e){ lastErr = e?.message || String(e); }
+      }
+      throw Object.assign(new Error(`All gateways failed (${lastErr||"unknown"})`), { tried });
+    }
+
+    async function run(){
+      $("err").textContent = "";
+      $("meta").textContent = "-";
+      $("img").removeAttribute("src");
+      $("links").innerHTML = "";
+
+      const input = $("uri").value.trim();
+      if (!input){ $("err").textContent = "請輸入 tokenURI（ipfs:// 或 http(s)://）"; return; }
+
+      try{
+        const { text, tried } = await fetchTextFromGateways(input);
+        $("meta").textContent = text;
+        $("links").innerHTML = tried.map(u=>`<a href="${u}" target="_blank">${u}</a>`).join("");
+
+        try{
+          const meta = JSON.parse(text);
+          if (meta?.image){
+            $("img").src = noCache(ipfsToHttp(meta.image));
+          } else {
+            $("err").textContent = "JSON 內找不到 image 欄位。";
+          }
+        }catch{
+          $("err").textContent = "抓到的不是 JSON（或 JSON 解析失敗）。";
+        }
+      }catch(e){
+        $("err").textContent = e?.message || String(e);
+        if (e?.tried) $("links").innerHTML = e.tried.map(u=>`<a href="${u}" target="_blank">${u}</a>`).join("");
+      }
+    }
+
+    $("go").addEventListener("click", run);
+    $("uri").addEventListener("keydown", (e)=>{ if (e.key==="Enter") run(); });
+  </script>
+</body>
+</html>
