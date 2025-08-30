@@ -1,13 +1,28 @@
-import { ethers } from "hardhat";
+import { ethers, artifacts } from "hardhat";
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 
 async function main() {
-  const Factory = await ethers.getContractFactory("AntiCounterfeitNFT");
-  const c = await Factory.deploy();
+  const [deployer] = await ethers.getSigners();
+  console.log("Deployer:", deployer.address);
+
+  const C = await ethers.getContractFactory("AntiCounterfeitNFT");
+  const c = await C.deploy();
   await c.waitForDeployment();
-  console.log("✅ AntiCounterfeitNFT deployed to:", await c.getAddress());
+
+  const address = await c.getAddress();
+  console.log("AntiCounterfeitNFT:", address);
+
+  // 輸出到 deployments/<network>/
+  const network = (await ethers.provider.getNetwork()).name || "local";
+  const outDir = join(__dirname, "..", "deployments", network);
+  mkdirSync(outDir, { recursive: true });
+
+  writeFileSync(join(outDir, "address.json"), JSON.stringify({ address }, null, 2));
+  const artifact = await artifacts.readArtifact("AntiCounterfeitNFT");
+  writeFileSync(join(outDir, "AntiCounterfeitNFT.abi.json"), JSON.stringify(artifact.abi, null, 2));
+
+  console.log("Saved:", outDir);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch((e) => { console.error(e); process.exit(1); });

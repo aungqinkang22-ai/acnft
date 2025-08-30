@@ -1,25 +1,60 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import {
+  AntiCounterfeitNFT,
+  AntiCounterfeitNFT__factory,
+} from "../typechain-types";
 
-describe("AntiCounterfeitNFT", () => {
+
+describe("AntiCounterfeitNFT", function () {
+ async function deploy() {
+  const [owner, user] = await ethers.getSigners();
+
+  // 型別化工廠
+  const Factory = (await ethers.getContractFactory(
+    "AntiCounterfeitNFT"
+  )) as AntiCounterfeitNFT__factory;
+
+  const c: AntiCounterfeitNFT = await Factory.deploy();
+  await c.waitForDeployment();
+
+  return { c, owner, user };
+}
+
+
   it("mint → ownerOf → revoke", async () => {
-    const [owner, alice] = await ethers.getSigners();
+    const { c, owner } = await deploy();
 
-    const Factory = await ethers.getContractFactory("AntiCounterfeitNFT");
-    const c = await Factory.deploy();
-    await c.waitForDeployment();
+    const uri = "ipfs://bafy-demo-json";
+    await (await c.mint(owner.address, uri)).wait();
 
-    // mint 一顆給 alice
-    const tx = await c.mint(alice.address, "ipfs://demo-metadata");
-    await tx.wait();
+    // 第一顆 tokenId 應該是 0
+    expect(await c.ownerOf(0n)).to.equal(owner.address);
+    expect(await c.tokenURI(0n)).to.equal(uri);
 
-    // tokenId 會從 0 開始
-    expect(await c.ownerOf(0)).to.equal(alice.address);
-    expect(await c.isRevoked(0)).to.equal(false);
+    // revoke 前應為 false
+    expect(await c.revoked(0n)).to.equal(false);
+    await (await c.revoke(0n)).wait();
+    expect(await c.revoked(0n)).to.equal(true);
 
-    // 撤銷
-    const tx2 = await c.revoke(0);
-    await tx2.wait();
-    expect(await c.isRevoked(0)).to.equal(true);
+    // 不能重複 revoke
+    await expect(c.revoke(0n)).to.be.revertedWith("Already revoked");
+  });
+
+  it("freezeTokenURI prevents further updates", async () => {
+    const { c, owner } = await deploy();
+
+    await (await c.mint(owner.address, "ipfs://old")).wait();
+    // 未凍結前可改
+    await (await c.ownerSetTokenURI(0n, "ipfs://new1")).wait();
+    expect(await c.tokenURI(0n)).to.equal("ipfs://new1");
+
+    // 凍結
+    await (await c.freezeTokenURI(0n)).wait();
+    expect(await c.uriFrozen(0n)).to.equal(true);
+
+    // 凍結後禁止更改
+    await expect(c.ownerSetTokenURI(0n, "ipfs://new2")).to.be.revertedWith("URI frozen");
+    expect(await c.tokenURI(0n)).to.equal("ipfs://new1");
   });
 });
