@@ -1,71 +1,98 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>ACNFT Verifier</title><script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:980px;margin:24px auto;padding:0 16px}h1{font-size:24px;margin:0 0 16px}label{display:block;font-size:12px;color:#666;margin:12px 0 4px}input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}button{margin-top:12px;padding:10px 18px;border:0;border-radius:8px;background:#1e63ff;color:#fff;cursor:pointer}.row{display:grid;grid-template-columns:1fr;gap:16px}@media(min-width:900px){.row{grid-template-columns:1.2fr .8fr}}.box{background:#f7f8fa;border:1px solid #e8ecf1;border-radius:10px;padding:14px;white-space:pre-wrap;word-break:break-word}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}.muted{color:#888}.imgwrap{padding:10px;border:1px dashed #c8d2e0;border-radius:10px;display:inline-block;background:#fff}</style></head><body>
-<h1>🔐 ACNFT Verifier</h1>
-<p class="muted">在 <b>localhost</b> 或 <b>Sepolia</b> 查 ownerOf / tokenURI / revoked（支援 IPFS 圖片預覽）。</p>
-<label>RPC URL</label><input id="rpc" value="https://eth-sepolia.g.alchemy.com/v2/XXXXXXXX"/>
-<label>Contract Address</label><input id="caddr" placeholder="0x..."/>
-<label>Token ID</label><input id="tid" value="0"/>
-<button id="btn">Fetch</button>
-<h3>Results</h3>
-<div class="row"><div>
-  <div class="muted">ownerOf</div><div id="owner" class="box mono">-</div>
-  <div class="muted" style="margin-top:12px">tokenURI</div><div id="turi" class="box mono">-</div>
-  <div class="muted" style="margin-top:12px">revoked</div><div id="rev" class="box mono">-</div>
-  <div class="muted" style="margin-top:12px">Metadata (via public gateways)</div><div id="meta" class="box mono">-</div>
-</div><div>
-  <div class="muted">Image preview</div><div id="img" class="imgwrap">No image</div>
-</div></div>
-<script>
-(function(){
-  const $ = id => document.getElementById(id);
-  const ABI = [
-    "function ownerOf(uint256) view returns (address)",
-    "function tokenURI(uint256) view returns (string)",
-    "function isRevoked(uint256) view returns (bool)"
-  ];
-  function httpFromIpfs(uri){
-    if(!uri) return "";
-    if(uri.startsWith("ipfs://")){
-      const p = uri.slice("ipfs://".length);
-      return `https://ipfs.io/ipfs/${p}`;
-    }
-    return uri;
-  }
-  async function fetchJson(url){
-    try{
-      const r = await fetch(url,{cache:"no-store"});
-      if(!r.ok) throw new Error(r.status+" "+r.statusText);
-      return await r.json();
-    }catch(e){ return {error:String(e.message||e)}; }
-  }
-  $("btn").onclick = async () => {
-    $("owner").textContent = $("turi").textContent = $("rev").textContent = "-";
-    $("meta").textContent = "-"; $("img").innerHTML = "No image";
-    const rpc = $("rpc").value.trim();
-    const addr = $("caddr").value.trim();
-    const tid = parseInt(($("tid").value||"0").trim(),10);
-    try{
-      const provider = new ethers.providers.JsonRpcProvider(rpc);
-      const c = new ethers.Contract(addr, ABI, provider);
-      try{ $("owner").textContent = await c.ownerOf(tid); }
-      catch(e){ $("owner").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
-      let uri="-";
-      try{ uri = await c.tokenURI(tid); $("turi").textContent = uri; }
-      catch(e){ $("turi").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
-      try{ $("rev").textContent = String(await c.isRevoked(tid)); }
-      catch(e){ $("rev").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
-      if(typeof uri==="string" && uri.startsWith("ipfs://")){
-        const metaUrl = httpFromIpfs(uri);
-        const meta = await fetchJson(metaUrl);
-        $("meta").textContent = JSON.stringify(meta,null,2);
-        const imgUri = meta && meta.image ? httpFromIpfs(meta.image) : "";
-        if(imgUri){
-          const img=new Image(); img.alt="NFT image"; img.style.maxWidth="360px";
-          img.onload=()=>{$("img").innerHTML="";$("img").appendChild(img);};
-          img.onerror=()=>{$("img").textContent="Image fetch failed";};
-          img.src=imgUri;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ACNFT Verifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/viem@1.21.4/dist/index.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    label { display: block; margin-top: 1em; }
+    input { width: 100%; padding: 6px; }
+    button { margin-top: 1em; padding: 10px 15px; }
+    .result { margin-top: 2em; padding: 1em; border: 1px solid #ccc; }
+    img { max-width: 200px; margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <h1>ACNFT Verifier</h1>
+
+  <label>RPC URL</label>
+  <input id="rpc" value="https://eth-sepolia.g.alchemy.com/v2/OzBtyq3IFP2qZv2Kxobrm" readonly>
+
+  <label>Contract Address</label>
+  <input id="contract" value="0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f" readonly>
+
+  <label>Token ID</label>
+  <input id="tokenId" value="0">
+
+  <button onclick="verify()">Fetch</button>
+
+  <div class="result">
+    <p><b>Owner:</b> <span id="owner">-</span></p>
+    <p><b>TokenURI:</b> <span id="tokenURI">-</span></p>
+    <p><b>Revoked:</b> <span id="revoked">-</span></p>
+    <div id="metadata"></div>
+  </div>
+
+  <script type="module">
+    import { createPublicClient, http } from "https://esm.sh/viem@1.21.4";
+    import { sepolia } from "https://esm.sh/viem@1.21.4/chains";
+
+    const abi = [
+      "function ownerOf(uint256 tokenId) view returns (address)",
+      "function tokenURI(uint256 tokenId) view returns (string)",
+      "function isRevoked(uint256 tokenId) view returns (bool)"
+    ];
+
+    async function verify() {
+      const rpcUrl = document.getElementById('rpc').value;
+      const contractAddr = document.getElementById('contract').value;
+      const tokenId = parseInt(document.getElementById('tokenId').value);
+
+      const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+
+      let owner = '-', uri = '-', revoked = '-';
+
+      try {
+        owner = await client.readContract({ address: contractAddr, abi, functionName: 'ownerOf', args: [tokenId] });
+        document.getElementById('owner').textContent = owner;
+      } catch (e) {
+        document.getElementById('owner').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+      }
+
+      try {
+        uri = await client.readContract({ address: contractAddr, abi, functionName: 'tokenURI', args: [tokenId] });
+        document.getElementById('tokenURI').textContent = uri;
+      } catch (e) {
+        document.getElementById('tokenURI').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+      }
+
+      try {
+        revoked = await client.readContract({ address: contractAddr, abi, functionName: 'isRevoked', args: [tokenId] });
+        document.getElementById('revoked').textContent = String(revoked);
+      } catch (e) {
+        document.getElementById('revoked').textContent = '⛔ ' + (e?.shortMessage || e?.message || e);
+      }
+
+      // 如果有 tokenURI → 嘗試載 metadata
+      if (uri.startsWith("ipfs://")) {
+        const url = "https://ipfs.io/ipfs/" + uri.replace("ipfs://", "");
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          let html = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+          if (data.image) {
+            const imgUrl = data.image.startsWith("ipfs://") 
+              ? "https://ipfs.io/ipfs/" + data.image.replace("ipfs://", "") 
+              : data.image;
+            html += `<img src="${imgUrl}">`;
+          }
+          document.getElementById('metadata').innerHTML = html;
+        } catch (err) {
+          document.getElementById('metadata').textContent = "❌ 無法載入 Metadata: " + err;
         }
       }
-    }catch(e){ alert(String(e.message||e)); }
-  };
-})();
-</script></body></html>
+    }
+  </script>
+</body>
+</html>
