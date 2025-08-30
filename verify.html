@@ -11,6 +11,7 @@
     .row { display:grid; grid-template-columns: 160px 1fr; gap: 8px; align-items:center; }
     .box { background: #f4f6f8; padding: 10px 12px; border-radius: 8px; min-height: 40px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    img { max-width: 200px; margin-top: 8px; border: 1px solid #ccc; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -34,27 +35,24 @@
   <div class="row"><div>tokenURI</div><div id="uri" class="box mono">-</div></div>
   <div class="row"><div>revoked</div><div id="revoked" class="box mono">-</div></div>
   <div class="row"><div>Metadata (gateways)</div><div id="meta" class="box mono">-</div></div>
+  <div class="row"><div>Image preview</div><div id="imageBox" class="box"><i>No image</i></div></div>
 
 <script>
 function $(id){ return document.getElementById(id); }
 
 function normalizeAddress(input){
   const s = (input || "").trim();
-  // 0x + 40 hex
   if (!/^0x[0-9a-fA-F]{40}$/.test(s)) throw new Error("Invalid address format");
-  // 轉小寫來略過 checksum 檢查
   return s.toLowerCase();
 }
 
 async function fetchAll(){
   try {
     const rpc = $("rpc").value.trim();
-    const addrInput = $("addr").value;
-    const addr = normalizeAddress(addrInput);
+    const addr = normalizeAddress($("addr").value);
     const tokenId = BigInt($("tid").value.trim());
 
     const provider = new ethers.JsonRpcProvider(rpc);
-
     const abi = [
       "function ownerOf(uint256) view returns (address)",
       "function tokenURI(uint256) view returns (string)",
@@ -62,7 +60,6 @@ async function fetchAll(){
     ];
     const c = new ethers.Contract(addr, abi, provider);
 
-    // 查鏈上
     const [owner, uri, revoked] = await Promise.all([
       c.ownerOf(tokenId),
       c.tokenURI(tokenId),
@@ -73,8 +70,9 @@ async function fetchAll(){
     $("uri").textContent     = uri;
     $("revoked").textContent = String(revoked);
 
-    // 嘗試透過公開 gateway 抓 metadata（如果是 ipfs://）
     $("meta").textContent = "-";
+    $("imageBox").innerHTML = "<i>No image</i>";
+
     if (uri.startsWith("ipfs://")) {
       const cid = uri.replace("ipfs://", "");
       const gateways = [
@@ -82,19 +80,23 @@ async function fetchAll(){
         `https://cloudflare-ipfs.com/ipfs/${cid}`,
         `https://gateway.pinata.cloud/ipfs/${cid}`
       ];
-      let ok = false;
       for (const u of gateways){
         try {
           const r = await fetch(u, { cache: "no-store" });
           if (r.ok){
             const j = await r.json();
             $("meta").textContent = JSON.stringify(j, null, 2);
-            ok = true;
+            if (j.image){
+              let imgUrl = j.image;
+              if (imgUrl.startsWith("ipfs://")) {
+                imgUrl = "https://ipfs.io/ipfs/" + imgUrl.replace("ipfs://", "");
+              }
+              $("imageBox").innerHTML = `<img src="${imgUrl}" alt="NFT image" />`;
+            }
             break;
           }
         } catch {}
       }
-      if (!ok) $("meta").textContent = "Failed to fetch metadata via public gateways.";
     }
   } catch (e){
     console.error(e);
