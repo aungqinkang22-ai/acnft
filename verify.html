@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ACNFT Verifier (ethers.js)</title>
+  <title>ACNFT Verifier (ethers.js, URL params)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
@@ -19,7 +19,7 @@
       <h1 class="text-3xl font-bold">🔒 ACNFT Verifier</h1>
       <p class="text-slate-600">
         Verify <span class="font-mono">ownerOf</span>, <span class="font-mono">tokenURI</span> and
-        <span class="font-mono">isRevoked</span> on Sepolia (ethers.js, no ESM).
+        <span class="font-mono">isRevoked</span> on Sepolia (ethers.js, no ESM). Supports URL params.
       </p>
     </header>
 
@@ -32,14 +32,15 @@
       <label class="block">
         <div class="label mb-1">Contract Address</div>
         <input id="contractAddr" type="text" class="w-full rounded-xl border p-2"
-               value="0xd88c83F5E503e7c7c52891b488e0Bd2507e4a20f"/>
+               placeholder="0x... (ERC721)"/>
       </label>
     </div>
 
-    <div class="mt-4 flex gap-2">
+    <div class="mt-4 flex flex-wrap gap-2">
       <input id="tokenId" type="number" class="flex-1 rounded-xl border p-2" placeholder="Token ID e.g. 14"/>
       <button id="fetchBtn" class="px-4 py-2 bg-blue-600 text-white rounded-xl">Fetch</button>
       <button id="saveBtn"  class="px-4 py-2 bg-slate-200 rounded-xl">Save</button>
+      <button id="shareBtn" class="px-4 py-2 bg-emerald-600 text-white rounded-xl">Share</button>
       <button id="clearBtn" class="px-4 py-2 bg-slate-200 rounded-xl">Clear</button>
     </div>
 
@@ -72,8 +73,10 @@
   </div>
 
   <script>
-    // ====== config ======
-    const MY_PINATA_SUBDOMAIN = "cyan-chemical-iguana-511.mypinata.cloud";
+    // ========= config =========
+    const MY_PINATA_SUBDOMAIN = "cyan-chemical-iguana-511.mypinata.cloud"; // 你的 Pinata 子網域（可改）
+    const DEFAULT_CHAIN = "sepolia";
+
     const ABI = [
       {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"metadataURI","type":"string"}],"name":"mint","outputs":[],"stateMutability":"nonpayable","type":"function"},
       {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
@@ -81,7 +84,7 @@
       {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"isRevoked","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
     ];
 
-    // ====== helpers ======
+    // ========= helpers =========
     const $ = (id) => document.getElementById(id);
     const LS_KEY = "acnft_verifier_state";
     const noCache = (url) => url + (url.includes("?") ? "&" : "?") + "_=" + Date.now();
@@ -89,6 +92,16 @@
     const ipfsToHttp = (u) => u && u.startsWith("ipfs://")
       ? `https://${MY_PINATA_SUBDOMAIN}/ipfs/${u.slice(7)}`
       : u;
+    const qs = new URLSearchParams(location.search);
+    const getQS = (k) => { const v = qs.get(k); return v==null ? "" : v; };
+
+    function buildEtherscanUrl(chain, addr, tokenId){
+      if (chain === "sepolia") {
+        return `https://sepolia.etherscan.io/token/${addr}?a=${tokenId}`;
+      }
+      // 預留其它鏈
+      return `https://sepolia.etherscan.io/token/${addr}?a=${tokenId}`;
+    }
 
     async function fetchTextFromGateways(ipfsOrHttp){
       if (/^https?:\/\//i.test(ipfsOrHttp)) {
@@ -117,12 +130,24 @@
       throw Object.assign(new Error(`All gateways failed (${lastErr||"unknown"})`), { tried });
     }
 
-    // ====== UI init ======
+    // ========= UI init =========
     (function init(){
+      // 先載入 localStorage
       const s = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
       if (s.rpcUrl) $("rpcUrl").value = s.rpcUrl;
       if (s.contractAddr) $("contractAddr").value = s.contractAddr;
       if (s.tokenId !== undefined) $("tokenId").value = s.tokenId;
+
+      // 再覆蓋 URL 參數
+      const rpcQS = getQS("rpc");
+      const cQS   = getQS("contract");
+      const tQS   = getQS("token");
+      if (rpcQS) $("rpcUrl").value = rpcQS;
+      if (cQS)   $("contractAddr").value = cQS;
+      if (tQS)   $("tokenId").value = tQS;
+
+      // 有 token 就自動 Fetch
+      if (tQS) setTimeout(fetchData, 0);
     })();
 
     $("saveBtn").addEventListener("click", ()=>{
@@ -137,12 +162,26 @@
     $("clearBtn").addEventListener("click", ()=>{
       localStorage.removeItem(LS_KEY);
       $("rpcUrl").value = "";
+      $("contractAddr").value = "";
       $("tokenId").value = "";
+    });
+
+    $("shareBtn").addEventListener("click", ()=>{
+      const url = new URL(location.href);
+      const params = new URLSearchParams();
+      if ($("rpcUrl").value.trim())      params.set("rpc", $("rpcUrl").value.trim());
+      if ($("contractAddr").value.trim())params.set("contract", $("contractAddr").value.trim());
+      if ($("tokenId").value.trim()!=="")params.set("token", $("tokenId").value.trim());
+      url.search = params.toString();
+      navigator.clipboard.writeText(url.toString()).then(
+        ()=>alert("Share link copied!"),
+        ()=>alert(url.toString())
+      );
     });
 
     $("fetchBtn").addEventListener("click", fetchData);
 
-    // ====== main ======
+    // ========= main =========
     async function fetchData(){
       $("error").textContent = "";
       $("owner").textContent = $("tokenURI").textContent = $("revoked").textContent = "-";
@@ -166,7 +205,6 @@
       catch { $("error").textContent = "Token ID must be an integer."; return; }
 
       try{
-        // ethers v6 provider + contract (read-only)
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const contract = new ethers.Contract(addr, ABI, provider);
 
@@ -195,7 +233,6 @@
             const { text, tried } = await fetchTextFromGateways(uri);
             $("metaPreview").textContent = text;
             $("gwLinks").innerHTML = tried.map(u=>`<a class="underline text-blue-600" target="_blank" href="${u}">${u}</a>`).join("<br/>");
-
             try{
               const meta = JSON.parse(text);
               if (meta?.image){
@@ -203,14 +240,14 @@
                 $("nftImage").src = imgUrl;
                 $("imgWrap").classList.remove("hidden");
               }
-            }catch{/* JSON 解析失敗就忽略圖片 */}
+            }catch{/* ignore */}
           }catch(e){
             $("metaPreview").textContent = "Failed to fetch metadata: " + (e?.message||e);
           }
         }
 
         // QR (Etherscan)
-        const etherscanUrl = `https://sepolia.etherscan.io/token/${addr}?a=${tokenId}`;
+        const etherscanUrl = buildEtherscanUrl(DEFAULT_CHAIN, addr, tokenId);
         QRCode.toCanvas($("qrcode"), etherscanUrl, { width: 150 }, (err)=>{ if (err) console.error(err); });
 
       }catch(err){
