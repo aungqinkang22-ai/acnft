@@ -1,127 +1,106 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>ACNFT Verifier</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- ethers.js -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.7.0/dist/ethers.min.js"></script>
-  <!-- QRCode -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.6.0/ethers.umd.min.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial; max-width: 900px; margin: 24px auto; }
+    input { width: 100%; padding: 8px 10px; margin: 6px 0 14px; }
+    button { padding: 10px 16px; font-weight: 600; }
+    .row { display:grid; grid-template-columns: 160px 1fr; gap: 8px; align-items:center; }
+    .box { background: #f4f6f8; padding: 10px 12px; border-radius: 8px; min-height: 40px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
 </head>
-<body class="min-h-screen bg-gray-100 p-6">
-  <div class="max-w-3xl mx-auto">
-    <h1 class="text-3xl font-bold mb-4">🔒 ACNFT Verifier</h1>
-    <p class="mb-6">Verify <code>ownerOf</code>, <code>tokenURI</code> and <code>revoked</code> on Sepolia / localhost.</p>
+<body>
+  <h2>🔒 ACNFT Verifier</h2>
+  <p>Verify <b>ownerOf</b>, <b>tokenURI</b>, and <b>revoked</b> on localhost.</p>
 
-    <div class="grid gap-4">
-      <label class="block">
-        <span class="text-sm">RPC URL</span>
-        <input id="rpcUrl" type="text" value="http://127.0.0.1:8545" class="w-full rounded border p-2" />
-      </label>
-
-      <label class="block">
-        <span class="text-sm">Contract Address</span>
-        <input id="contractAddr" type="text" class="w-full rounded border p-2" />
-      </label>
-
-      <label class="block">
-        <span class="text-sm">Token ID</span>
-        <input id="tokenId" type="number" value="0" class="w-full rounded border p-2" />
-      </label>
-
-      <button onclick="fetchData()" class="px-4 py-2 bg-blue-600 text-white rounded">Fetch</button>
-    </div>
-
-    <div id="results" class="mt-6 space-y-2">
-      <div><strong>ownerOf:</strong> <span id="owner">-</span></div>
-      <div><strong>tokenURI:</strong> <span id="tokenURI">-</span></div>
-      <div><strong>revoked:</strong> <span id="revoked">-</span></div>
-      <div class="mt-4">
-        <strong>QR:</strong>
-        <div id="qr"></div>
-      </div>
-      <div class="mt-4">
-        <strong>Metadata (via public gateways):</strong>
-        <pre id="metadata" class="bg-gray-200 p-2 text-sm overflow-x-auto"></pre>
-        <div><img id="nftImage" class="mt-2 max-h-64 border" /></div>
-      </div>
-    </div>
+  <div class="row"><label>RPC URL</label>
+    <input id="rpc" value="http://127.0.0.1:8545" />
+  </div>
+  <div class="row"><label>Contract Address</label>
+    <input id="addr" value="0x5FbDB2315678afecb367f032d93F642f64180aa3" />
+  </div>
+  <div class="row"><label>Token ID</label>
+    <input id="tid" value="0" />
   </div>
 
-  <script>
+  <button onclick="fetchAll()">Fetch</button>
+
+  <h3>Results</h3>
+  <div class="row"><div>ownerOf</div><div id="owner" class="box mono">-</div></div>
+  <div class="row"><div>tokenURI</div><div id="uri" class="box mono">-</div></div>
+  <div class="row"><div>revoked</div><div id="revoked" class="box mono">-</div></div>
+  <div class="row"><div>Metadata (gateways)</div><div id="meta" class="box mono">-</div></div>
+
+<script>
+function $(id){ return document.getElementById(id); }
+
+function normalizeAddress(input){
+  const s = (input || "").trim();
+  // 0x + 40 hex
+  if (!/^0x[0-9a-fA-F]{40}$/.test(s)) throw new Error("Invalid address format");
+  // 轉小寫來略過 checksum 檢查
+  return s.toLowerCase();
+}
+
+async function fetchAll(){
+  try {
+    const rpc = $("rpc").value.trim();
+    const addrInput = $("addr").value;
+    const addr = normalizeAddress(addrInput);
+    const tokenId = BigInt($("tid").value.trim());
+
+    const provider = new ethers.JsonRpcProvider(rpc);
+
     const abi = [
-      { name: "ownerOf", type: "function", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "address" }] },
-      { name: "tokenURI", type: "function", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "string" }] },
-      { name: "revoked", type: "function", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "bool" }] }
+      "function ownerOf(uint256) view returns (address)",
+      "function tokenURI(uint256) view returns (string)",
+      "function revoked(uint256) view returns (bool)"
     ];
+    const c = new ethers.Contract(addr, abi, provider);
 
-    async function fetchData() {
-      const rpcUrl = document.getElementById("rpcUrl").value;
-      const contractAddr = document.getElementById("contractAddr").value;
-      const tokenId = parseInt(document.getElementById("tokenId").value);
+    // 查鏈上
+    const [owner, uri, revoked] = await Promise.all([
+      c.ownerOf(tokenId),
+      c.tokenURI(tokenId),
+      c.revoked(tokenId)
+    ]);
 
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
+    $("owner").textContent   = owner;
+    $("uri").textContent     = uri;
+    $("revoked").textContent = String(revoked);
 
-      let owner = "-", uri = "-", revoked = "-";
-
-      try {
-        owner = await provider.call({ to: contractAddr, data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [tokenId]) });
-      } catch {}
-
-      try {
-        const contract = new ethers.Contract(contractAddr, abi, provider);
-        owner = await contract.ownerOf(tokenId);
-        document.getElementById("owner").textContent = owner;
-
-        uri = await contract.tokenURI(tokenId);
-        document.getElementById("tokenURI").textContent = uri;
-
-        revoked = await contract.revoked(tokenId);
-        document.getElementById("revoked").textContent = revoked;
-
-        // QR code
-        const qrCanvas = document.createElement("canvas");
-        document.getElementById("qr").innerHTML = "";
-        QRCode.toCanvas(qrCanvas, `https://sepolia.etherscan.io/token/${contractAddr}?a=${tokenId}`, () => {
-          document.getElementById("qr").appendChild(qrCanvas);
-        });
-
-        // fetch metadata
-        if (uri.startsWith("ipfs://")) {
-          const cid = uri.replace("ipfs://", "");
-          const gateways = [
-            `https://ipfs.io/ipfs/${cid}`,
-            `https://gateway.pinata.cloud/ipfs/${cid}`,
-            `https://cloudflare-ipfs.com/ipfs/${cid}`
-          ];
-          let metadata = null;
-          for (let g of gateways) {
-            try {
-              const res = await fetch(g);
-              if (res.ok) {
-                metadata = await res.json();
-                document.getElementById("metadata").textContent = JSON.stringify(metadata, null, 2);
-                if (metadata.image) {
-                  const imgCid = metadata.image.replace("ipfs://", "");
-                  document.getElementById("nftImage").src = `https://ipfs.io/ipfs/${imgCid}`;
-                }
-                break;
-              }
-            } catch (e) {
-              console.log("Gateway failed:", g);
-            }
+    // 嘗試透過公開 gateway 抓 metadata（如果是 ipfs://）
+    $("meta").textContent = "-";
+    if (uri.startsWith("ipfs://")) {
+      const cid = uri.replace("ipfs://", "");
+      const gateways = [
+        `https://ipfs.io/ipfs/${cid}`,
+        `https://cloudflare-ipfs.com/ipfs/${cid}`,
+        `https://gateway.pinata.cloud/ipfs/${cid}`
+      ];
+      let ok = false;
+      for (const u of gateways){
+        try {
+          const r = await fetch(u, { cache: "no-store" });
+          if (r.ok){
+            const j = await r.json();
+            $("meta").textContent = JSON.stringify(j, null, 2);
+            ok = true;
+            break;
           }
-          if (!metadata) document.getElementById("metadata").textContent = "❌ Failed to fetch metadata";
-        }
-      } catch (e) {
-        document.getElementById("owner").textContent = "⛔ " + e.message;
-        document.getElementById("tokenURI").textContent = "-";
-        document.getElementById("revoked").textContent = "-";
+        } catch {}
       }
+      if (!ok) $("meta").textContent = "Failed to fetch metadata via public gateways.";
     }
-  </script>
+  } catch (e){
+    console.error(e);
+    alert(e.message || String(e));
+  }
+}
+</script>
 </body>
 </html>
