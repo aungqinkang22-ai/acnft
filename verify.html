@@ -1,108 +1,71 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>ACNFT Verifier</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.6.0/ethers.umd.min.js"></script>
-  <style>
-    body { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial; max-width: 900px; margin: 24px auto; }
-    input { width: 100%; padding: 8px 10px; margin: 6px 0 14px; }
-    button { padding: 10px 16px; font-weight: 600; }
-    .row { display:grid; grid-template-columns: 160px 1fr; gap: 8px; align-items:center; }
-    .box { background: #f4f6f8; padding: 10px 12px; border-radius: 8px; min-height: 40px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    img { max-width: 200px; margin-top: 8px; border: 1px solid #ccc; border-radius: 8px; }
-  </style>
-</head>
-<body>
-  <h2>🔒 ACNFT Verifier</h2>
-  <p>Verify <b>ownerOf</b>, <b>tokenURI</b>, and <b>revoked</b> on localhost.</p>
-
-  <div class="row"><label>RPC URL</label>
-    <input id="rpc" value="http://127.0.0.1:8545" />
-  </div>
-  <div class="row"><label>Contract Address</label>
-    <input id="addr" value="0x5FbDB2315678afecb367f032d93F642f64180aa3" />
-  </div>
-  <div class="row"><label>Token ID</label>
-    <input id="tid" value="0" />
-  </div>
-
-  <button onclick="fetchAll()">Fetch</button>
-
-  <h3>Results</h3>
-  <div class="row"><div>ownerOf</div><div id="owner" class="box mono">-</div></div>
-  <div class="row"><div>tokenURI</div><div id="uri" class="box mono">-</div></div>
-  <div class="row"><div>revoked</div><div id="revoked" class="box mono">-</div></div>
-  <div class="row"><div>Metadata (gateways)</div><div id="meta" class="box mono">-</div></div>
-  <div class="row"><div>Image preview</div><div id="imageBox" class="box"><i>No image</i></div></div>
-
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>ACNFT Verifier</title><script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:980px;margin:24px auto;padding:0 16px}h1{font-size:24px;margin:0 0 16px}label{display:block;font-size:12px;color:#666;margin:12px 0 4px}input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}button{margin-top:12px;padding:10px 18px;border:0;border-radius:8px;background:#1e63ff;color:#fff;cursor:pointer}.row{display:grid;grid-template-columns:1fr;gap:16px}@media(min-width:900px){.row{grid-template-columns:1.2fr .8fr}}.box{background:#f7f8fa;border:1px solid #e8ecf1;border-radius:10px;padding:14px;white-space:pre-wrap;word-break:break-word}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}.muted{color:#888}.imgwrap{padding:10px;border:1px dashed #c8d2e0;border-radius:10px;display:inline-block;background:#fff}</style></head><body>
+<h1>🔐 ACNFT Verifier</h1>
+<p class="muted">在 <b>localhost</b> 或 <b>Sepolia</b> 查 ownerOf / tokenURI / revoked（支援 IPFS 圖片預覽）。</p>
+<label>RPC URL</label><input id="rpc" value="https://eth-sepolia.g.alchemy.com/v2/XXXXXXXX"/>
+<label>Contract Address</label><input id="caddr" placeholder="0x..."/>
+<label>Token ID</label><input id="tid" value="0"/>
+<button id="btn">Fetch</button>
+<h3>Results</h3>
+<div class="row"><div>
+  <div class="muted">ownerOf</div><div id="owner" class="box mono">-</div>
+  <div class="muted" style="margin-top:12px">tokenURI</div><div id="turi" class="box mono">-</div>
+  <div class="muted" style="margin-top:12px">revoked</div><div id="rev" class="box mono">-</div>
+  <div class="muted" style="margin-top:12px">Metadata (via public gateways)</div><div id="meta" class="box mono">-</div>
+</div><div>
+  <div class="muted">Image preview</div><div id="img" class="imgwrap">No image</div>
+</div></div>
 <script>
-function $(id){ return document.getElementById(id); }
-
-function normalizeAddress(input){
-  const s = (input || "").trim();
-  if (!/^0x[0-9a-fA-F]{40}$/.test(s)) throw new Error("Invalid address format");
-  return s.toLowerCase();
-}
-
-async function fetchAll(){
-  try {
-    const rpc = $("rpc").value.trim();
-    const addr = normalizeAddress($("addr").value);
-    const tokenId = BigInt($("tid").value.trim());
-
-    const provider = new ethers.JsonRpcProvider(rpc);
-    const abi = [
-      "function ownerOf(uint256) view returns (address)",
-      "function tokenURI(uint256) view returns (string)",
-      "function revoked(uint256) view returns (bool)"
-    ];
-    const c = new ethers.Contract(addr, abi, provider);
-
-    const [owner, uri, revoked] = await Promise.all([
-      c.ownerOf(tokenId),
-      c.tokenURI(tokenId),
-      c.revoked(tokenId)
-    ]);
-
-    $("owner").textContent   = owner;
-    $("uri").textContent     = uri;
-    $("revoked").textContent = String(revoked);
-
-    $("meta").textContent = "-";
-    $("imageBox").innerHTML = "<i>No image</i>";
-
-    if (uri.startsWith("ipfs://")) {
-      const cid = uri.replace("ipfs://", "");
-      const gateways = [
-        `https://ipfs.io/ipfs/${cid}`,
-        `https://cloudflare-ipfs.com/ipfs/${cid}`,
-        `https://gateway.pinata.cloud/ipfs/${cid}`
-      ];
-      for (const u of gateways){
-        try {
-          const r = await fetch(u, { cache: "no-store" });
-          if (r.ok){
-            const j = await r.json();
-            $("meta").textContent = JSON.stringify(j, null, 2);
-            if (j.image){
-              let imgUrl = j.image;
-              if (imgUrl.startsWith("ipfs://")) {
-                imgUrl = "https://ipfs.io/ipfs/" + imgUrl.replace("ipfs://", "");
-              }
-              $("imageBox").innerHTML = `<img src="${imgUrl}" alt="NFT image" />`;
-            }
-            break;
-          }
-        } catch {}
-      }
+(function(){
+  const $ = id => document.getElementById(id);
+  const ABI = [
+    "function ownerOf(uint256) view returns (address)",
+    "function tokenURI(uint256) view returns (string)",
+    "function isRevoked(uint256) view returns (bool)"
+  ];
+  function httpFromIpfs(uri){
+    if(!uri) return "";
+    if(uri.startsWith("ipfs://")){
+      const p = uri.slice("ipfs://".length);
+      return `https://ipfs.io/ipfs/${p}`;
     }
-  } catch (e){
-    console.error(e);
-    alert(e.message || String(e));
+    return uri;
   }
-}
-</script>
-</body>
-</html>
+  async function fetchJson(url){
+    try{
+      const r = await fetch(url,{cache:"no-store"});
+      if(!r.ok) throw new Error(r.status+" "+r.statusText);
+      return await r.json();
+    }catch(e){ return {error:String(e.message||e)}; }
+  }
+  $("btn").onclick = async () => {
+    $("owner").textContent = $("turi").textContent = $("rev").textContent = "-";
+    $("meta").textContent = "-"; $("img").innerHTML = "No image";
+    const rpc = $("rpc").value.trim();
+    const addr = $("caddr").value.trim();
+    const tid = parseInt(($("tid").value||"0").trim(),10);
+    try{
+      const provider = new ethers.providers.JsonRpcProvider(rpc);
+      const c = new ethers.Contract(addr, ABI, provider);
+      try{ $("owner").textContent = await c.ownerOf(tid); }
+      catch(e){ $("owner").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
+      let uri="-";
+      try{ uri = await c.tokenURI(tid); $("turi").textContent = uri; }
+      catch(e){ $("turi").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
+      try{ $("rev").textContent = String(await c.isRevoked(tid)); }
+      catch(e){ $("rev").textContent = "❌ " + (e.error?.message || e.reason || e.message || e); }
+      if(typeof uri==="string" && uri.startsWith("ipfs://")){
+        const metaUrl = httpFromIpfs(uri);
+        const meta = await fetchJson(metaUrl);
+        $("meta").textContent = JSON.stringify(meta,null,2);
+        const imgUri = meta && meta.image ? httpFromIpfs(meta.image) : "";
+        if(imgUri){
+          const img=new Image(); img.alt="NFT image"; img.style.maxWidth="360px";
+          img.onload=()=>{$("img").innerHTML="";$("img").appendChild(img);};
+          img.onerror=()=>{$("img").textContent="Image fetch failed";};
+          img.src=imgUri;
+        }
+      }
+    }catch(e){ alert(String(e.message||e)); }
+  };
+})();
+</script></body></html>
